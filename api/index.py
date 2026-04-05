@@ -1,27 +1,27 @@
-from fastapi import FastAPI, Request
 import requests
 import hashlib
+from fastapi import FastAPI, Request
 
-# Vercel entrypoint (Must be at the very top level)
+# Vercel entrypoint - Sabse upar hona zaroori hai
 app = FastAPI()
 
-U1 = "https://100067.connect.garena.com/game/account_security/bind:get_bind_info"
-U2 = "https://100067.connect.garena.com/game/account_security/bind:send_otp"
-U3 = "https://100067.connect.garena.com/game/account_security/bind:verify_otp"
-U4 = "https://100067.connect.garena.com/game/account_security/bind:create_bind_request"
-U5 = "https://100067.connect.garena.com/game/account_security/bind:verify_identity"
-U6 = "https://100067.connect.garena.com/game/account_security/bind:create_rebind_request"
-U7 = "https://100067.connect.garena.com/game/account_security/bind:create_unbind_request"
-U8 = "https://100067.connect.garena.com/game/account_security/bind:cancel_request"
-U9 = "https://100067.connect.garena.com/bind/app/platform/info/get"
-U10 = "https://100067.connect.garena.com/oauth/logout"
-U11 = "https://clientbp.ggwhitehawk.com/GetPlayerCSRankingInfoByAccountID"
-U12 = "https://clientbp.ggwhitehawk.com/GetFriendRequestList"
-U13 = "https://clientbp.ggwhitehawk.com/RequestAddingFriend"
-U14 = "https://clientbp.ggwhitehawk.com/RemoveFriend"
-U15 = "https://clientbp.ggwhitehawk.com/ConfirmFriendRequest"
-U16 = "https://clientbp.ggwhitehawk.com/DeclineFriendRequest"
-U17 = "https://100067.msdk.garena.com/api/msdk/v2/info/pricing"
+# --- Garena & Social URLs ---
+U_INFO     = "https://100067.connect.garena.com/game/account_security/bind:get_bind_info"
+U_OTP      = "https://100067.connect.garena.com/game/account_security/bind:send_otp"
+U_V_OTP    = "https://100067.connect.garena.com/game/account_security/bind:verify_otp"
+U_BIND     = "https://100067.connect.garena.com/game/account_security/bind:create_bind_request"
+U_V_ID     = "https://100067.connect.garena.com/game/account_security/bind:verify_identity"
+U_REBIND   = "https://100067.connect.garena.com/game/account_security/bind:create_rebind_request"
+U_CANCEL   = "https://100067.connect.garena.com/game/account_security/bind:cancel_request"
+U_PLAT     = "https://100067.connect.garena.com/bind/app/platform/info/get"
+U_RANK     = "https://clientbp.ggwhitehawk.com/GetPlayerCSRankingInfoByAccountID"
+U_F_LIST   = "https://clientbp.ggwhitehawk.com/GetFriendRequestList"
+U_F_ADD    = "https://clientbp.ggwhitehawk.com/RequestAddingFriend"
+U_F_REM    = "https://clientbp.ggwhitehawk.com/RemoveFriend"
+U_F_ACC    = "https://clientbp.ggwhitehawk.com/ConfirmFriendRequest"
+U_F_DEC    = "https://clientbp.ggwhitehawk.com/DeclineFriendRequest"
+
+AID = "100067"
 
 def gh(r: Request):
     ua = r.headers.get("user-agent", "GarenaMSDK/4.0.39 (M2007J22C; Android 10; en; US;)")
@@ -31,38 +31,52 @@ def hs(s: str):
     return hashlib.sha256(s.encode()).hexdigest()
 
 @app.get("/")
-async def root():
-    return {"status": "SUCCESS", "msg": "Sameer API V13 Fixed"}
+async def home():
+    return {"status": "SUCCESS", "msg": "SAMEER-API-V14-LIVE"}
 
-@app.get("/request")
-async def req(token: str, email: str, request: Request):
-    p = {"app_id": "100067", "access_token": token, "email": email, "locale": "en_PK", "region": "PK"}
-    r = requests.post(U2, data=p, headers=gh(request))
+# --- BINDING ---
+@app.get("/api/request")
+async def req_otp(token: str, email: str, request: Request):
+    p = {"app_id": AID, "access_token": token, "email": email, "locale": "en_PK", "region": "PK"}
+    r = requests.post(U_OTP, data=p, headers=gh(request))
     return r.json()
 
-@app.get("/confirm")
-async def b_new(token: str, email: str, otp: str, sc: str = "123456", request: Request):
+@app.get("/api/confirm")
+async def confirm_bind(token: str, email: str, otp: str, request: Request):
     h = gh(request)
-    v_res = requests.post(U3, data={"app_id": "100067", "access_token": token, "email": email, "otp": otp}, headers=h).json()
+    v_res = requests.post(U_V_OTP, data={"app_id": AID, "access_token": token, "email": email, "otp": otp}, headers=h).json()
     vt = v_res.get("verifier_token")
-    if not vt: return {"status": "ERROR", "res": v_res}
-    p = {"app_id": "100067", "access_token": token, "verifier_token": vt, "email": email, "secondary_password": hs(sc)}
-    r = requests.post(U4, data=p, headers=h)
+    if not vt: return {"status": "ERROR", "msg": "OTP Verification Failed", "garena": v_res}
+    
+    # Logic for fresh account: set password 123456
+    p = {"app_id": AID, "access_token": token, "verifier_token": vt, "email": email, "secondary_password": hs("123456")}
+    r = requests.post(U_BIND, data=p, headers=h)
     return r.json()
 
-@app.get("/info")
-async def info(token: str, request: Request):
+# --- INFO & RANK ---
+@app.get("/api/info")
+async def get_info(token: str, request: Request):
     h = gh(request)
-    b = requests.get(U1, params={"app_id": "100067", "access_token": token}, headers=h).json()
-    uid = b.get("uid", "0")
-    r = requests.get(U11, params={"access_token": token, "target_account_id": uid}, headers=h).json()
+    b = requests.get(U_INFO, params={"app_id": AID, "access_token": token}, headers=h).json()
+    uid = b.get("uid") or "0"
+    r = requests.get(U_RANK, params={"access_token": token, "target_account_id": uid}, headers=h).json()
     return {"bind": b, "rank": r}
 
-@app.get("/friends")
-async def fr(token: str, mode: str, target: str = None, request: Request):
+# --- FRIENDS ---
+@app.get("/api/friends")
+async def friends(token: str, mode: str, target: str = None, request: Request):
     h = gh(request)
-    m_map = {"list": U12, "add": U13, "remove": U14, "accept": U15, "decline": U16}
-    u = m_map.get(mode)
+    u_map = {"list": U_F_LIST, "add": U_F_ADD, "remove": U_F_REM, "accept": U_F_ACC, "decline": U_F_DEC}
+    url = u_map.get(mode)
+    if not url: return {"err": "Invalid mode"}
     p = {"access_token": token}
     if target: p["target_account_id"] = target
-    return requests.get(u, params=p, headers=h).json()
+    r = requests.get(url, params=p, headers=h)
+    return r.json()
+
+@app.get("/api/cancel")
+async def cancel(token: str, request: Request):
+    return requests.post(U_CANCEL, data={"app_id": AID, "access_token": token}, headers=gh(request)).json()
+
+# Vercel variable mapping
+handler = app
